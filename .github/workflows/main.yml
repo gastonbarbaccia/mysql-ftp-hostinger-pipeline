@@ -1,0 +1,63 @@
+# Template Hostinger v1.0
+
+name: Hostinger Pipeline
+
+
+on:
+  push:
+    branches: [ "main","develop" ]
+  pull_request:
+    branches: [ "main","develop" ]
+
+  workflow_dispatch:
+
+jobs:
+  Import_SQL_staging:
+    runs-on: ubuntu-latest
+    name: MySQL Deploy Staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - uses: gtadam/mysql-deploy-action@v1
+        with:
+          DATABASE_HOST: ${{secrets.SERVER_REMOTE}}
+          DATABASE_PORT: '3306'
+          DATABASE_NAME: ${{secrets.SERVER_DB_NAME}}
+          DATABASE_USERNAME:  ${{secrets.SERVER_DB_USERNAME}}
+          DATABASE_PASSWORD:   ${{secrets.SERVER_DB_PASSWORD}}
+          DATABASE_SCRIPT: 'script.sql'
+
+  Deploy_staging:
+    name: Deploy Staging
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: 
+      name: staging
+      url: https://staging-ci-cd-test.herokuapp.com/
+    needs: [Import_SQL_staging]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Upload ftp
+        uses: sebastianpopp/ftp-action@releases/v2
+        with:
+          host: ${{ secrets.FTP_SERVER }}
+          user: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          localDir: "."
+          remoteDir: "."
+
+  Deploy_production:
+    name: Deploy Production
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: 
+      name: production
+      url: https://prod-ci-cd-test.herokuapp.com/
+    needs: [Deploy_staging]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: akhileshns/heroku-deploy@v3.12.12 # This is the action
+        with:
+          heroku_api_key: ${{secrets.HEROKU_API_KEY_PRODUCTION}}
+          heroku_app_name: ${{secrets.HEROKU_APP_NAME_PRODUCTION}} #Must be unique in Heroku
+          heroku_email: "gastonbarbaccia@hotmail.com"
